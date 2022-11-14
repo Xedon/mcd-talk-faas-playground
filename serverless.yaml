@@ -1,0 +1,104 @@
+service: serverless-typescript
+
+frameworkVersion: ">=3.0.0 <=4.0.0"
+
+provider:
+  name: aws
+  stage: ${opt:stage, self:custom.defaultStage}
+  region: us-east-1
+  runtime: nodejs16.x
+  environment:
+    DYNAMODB_TABLE: ${self:service}-${opt:stage, self:provider.stage}
+    LOCAL: true
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE}"
+
+functions:
+  create:
+    handler: src/createBet.handler
+    events:
+      - http:
+          path: /bet
+          method: post
+          cors: true
+
+  list:
+    handler: src/fetchBets.handler
+    events:
+      - http:
+          path: /bet
+          method: get
+          cors: true
+
+  get:
+    handler: src/fetchBet.handler
+    events:
+      - http:
+          path: /bet/{id}
+          method: get
+          cors: true
+
+  update:
+    handler: src/updateBet.handler
+    events:
+      - http:
+          path: /bet/{id}
+          method: put
+          cors: true
+
+  delete:
+    handler: src/deleteBet.handler
+    events:
+      - http:
+          path: bet/{id}
+          method: delete
+          cors: true
+
+resources:
+  Resources:
+    BetDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      DeletionPolicy: Retain
+      Properties:
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: ReverseIndex
+            KeySchema:
+              - AttributeName: SK
+                KeyType: HASH
+              - AttributeName: PK
+                KeyType: RANGE
+            Projection:
+              ProjectionType: KEYS_ONLY
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}
+        StreamSpecification:
+          StreamViewType: NEW_IMAGE
+
+plugins:
+  - serverless-esbuild
+  - serverless-localstack
+
+custom:
+  defaultStage: local
+  profile: default
+  localstack:
+    debug: true
+    stages: [local]
